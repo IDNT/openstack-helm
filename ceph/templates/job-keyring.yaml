@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.job_keyring }}
+{{- if and .Values.manifests.job_keyring .Values.deployment.storage_secrets }}
 {{- $envAll := . }}
-{{- if .Values.deployment.storage_secrets }}
 {{- range $key1, $cephBootstrapKey := tuple "mds" "osd" "rgw" "mon" "mgr" }}
 {{- if not (and (not $envAll.Values.manifests.deployment_rgw) (eq $cephBootstrapKey "rgw")) }}
 {{- $jobName := print $cephBootstrapKey "-keyring-generator" }}
@@ -38,6 +37,7 @@ rules:
     verbs:
       - get
       - create
+      - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: RoleBinding
@@ -79,9 +79,9 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: CEPH_GEN_DIR
-              value: /opt/ceph
+              value: /tmp
             - name: CEPH_TEMPLATES_DIR
-              value: /opt/ceph/templates
+              value: /tmp/templates
             {{- if eq $cephBootstrapKey "mon"}}
             - name: CEPH_KEYRING_NAME
               value: ceph.mon.keyring
@@ -96,18 +96,18 @@ spec:
             - name: KUBE_SECRET_NAME
               value: {{  index $envAll.Values.secrets.keyrings $cephBootstrapKey }}
           command:
-            - /opt/ceph/ceph-key.sh
+            - /tmp/keys-bootstrap-keyring-manager.sh
           volumeMounts:
             - name: ceph-bin
-              mountPath: /opt/ceph/ceph-key.sh
-              subPath: ceph-key.sh
+              mountPath: /tmp/keys-bootstrap-keyring-manager.sh
+              subPath: keys-bootstrap-keyring-manager.sh
               readOnly: true
             - name: ceph-bin
-              mountPath: /opt/ceph/ceph-key.py
-              subPath: ceph-key.py
+              mountPath: /tmp/keys-bootstrap-keyring-generator.py
+              subPath: keys-bootstrap-keyring-generator.py
               readOnly: true
             - name: ceph-templates
-              mountPath: /opt/ceph/templates
+              mountPath: /tmp/templates
               readOnly: true
       volumes:
         - name: ceph-bin
@@ -118,7 +118,6 @@ spec:
           configMap:
             name: ceph-templates
             defaultMode: 0444
-{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
