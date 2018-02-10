@@ -30,30 +30,30 @@ function exitWithManualRecovery() {
    **********************************************************
    *            MANUAL RECOVERY ACTION REQUIRED             *
    **********************************************************
-   
-All cluster members are down and grastate.dat indicates that it's not 
+
+All cluster members are down and grastate.dat indicates that it's not
 safe to start the cluster from this node. If you see this message on
 all nodes, you have to do a manual recovery by following these steps:
-   
+
     a) Find the node with the highest WSREP seq#:
-           
+
 	POD ${PODNAME} uuid: ${UUID} seq: ${SEQNO}
-   	
-   	If you see uuid 00000000-0000-0000-0000-000000000000 with 
+
+   	If you see uuid 00000000-0000-0000-0000-000000000000 with
    	seq -1, the node crashed during DDL.
-   	
+
    	If seq is -1 you will find a DETECTED CRASH message
    	on your log. Check the output from InnoDB for the last
    	transaction id available.
-   	
+
     b) Set environment variable FORCE_RECOVERY=<NAME OF POD>
        to force bootstrapping from the specified node.
-   
-        Remember to remove FORCE_RECOVERY after your nodes 
-        are fully recovered! You may loose data otherwise.
 
-You can ignore this message and wait for the next restart if at 
-least one node started without erors.
+        Remember to remove FORCE_RECOVERY after your nodes
+        are fully recovered! You may lose data otherwise.
+
+You can ignore this message and wait for the next restart if at
+least one node started without errors.
 EOF
 
     exit 1
@@ -89,11 +89,11 @@ if [ ! -z "${FORCE_RECOVERY// }" ]; then
    **********************************************************
    *    !!!        FORCE_RECOVERY WARNING       !!!         *
    **********************************************************
-    
-POD ist starting with FORCE_RECOVERY defined. Remeber to unset this
-variable after recovery! You may end up in recovering from a node 
-with old data on a crash! 
-   
+
+POD is starting with FORCE_RECOVERY defined. Remember to unset this
+variable after recovery! You may end up in recovering from a node
+with old data on a crash!
+
 You have been warned ;-)
 
    **********************************************************
@@ -104,25 +104,25 @@ EOF
 fi
 
 if [ -d /var/lib/mysql/mysql -a -f /var/lib/mysql/grastate.dat ]; then
-    
+
     # Node already initialized
-    
+
     if [ "$(sed -e 's/^.*seqno:[\ ,\t]*//' -e 'tx' -e 'd' -e ':x' /var/lib/mysql/grastate.dat)" = "-1" ]; then
     	cat >/dev/stderr <<EOF
    **********************************************************
    *                   DETECTED CRASH                       *
    **********************************************************
-    
+
 Trying to recover from a previous crash by running with wsrep-recover...
 EOF
 	mysqld --wsrep_cluster_address=gcomm:// --wsrep-recover
     fi
-        
+
     echo "Check if we can find a cluster memeber."
     if ! mysql --defaults-file=/etc/mysql/admin_user.cnf \
         --connect-timeout 2 \
          -e 'select 1'; then
-	# No other nodes are running	
+	# No other nodes are running
     	if [ -z "${FORCE_RECOVERY// }" -a "$(sed -e 's/^.*safe_to_bootstrap:[\ ,\t]*//' -e 'tx' -e 'd' -e ':x' /var/lib/mysql/grastate.dat)" = "1" ]; then
             echo 'Bootstrapping from this node.'
             CLUSTER_INIT_ARGS=--wsrep-new-cluster
