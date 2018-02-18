@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.job_rbd_pool .Values.deployment.ceph }}
+{{- if .Values.manifests.job_rbd_pool }}
+{{- if .Values.deployment.ceph }}
 {{- $envAll := . }}
 {{- $dependencies := .Values.dependencies.rbd_pool }}
 
@@ -35,9 +36,9 @@ spec:
       serviceAccountName: {{ $serviceAccountName }}
       restartPolicy: OnFailure
       affinity:
-{{ tuple $envAll "ceph" "rbd-pool" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+{{ tuple $envAll "ceph" "mgr" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ $envAll.Values.labels.job.node_selector_key }}: {{ $envAll.Values.labels.job.node_selector_value }}
+        {{ .Values.labels.mgr.node_selector_key }}: {{ .Values.labels.mgr.node_selector_value }}
       initContainers:
 {{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
@@ -46,18 +47,22 @@ spec:
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.mgr | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
-            - name: CLUSTER
-              value: "ceph"
+            - name: RBD_POOL_PG
+              value: "128"
           command:
-            - /tmp/pool-init.sh
+            - /ceph_rbd_pool.sh
           volumeMounts:
             - name: ceph-bin
-              mountPath: /tmp/pool-init.sh
-              subPath: pool-init.sh
+              mountPath: /ceph_rbd_pool.sh
+              subPath: ceph_rbd_pool.sh
               readOnly: true
             - name: ceph-bin
-              mountPath: /tmp/pool-calc.py
-              subPath: pool-calc.py
+              mountPath: /variables_entrypoint.sh
+              subPath: variables_entrypoint.sh
+              readOnly: true
+            - name: ceph-bin
+              mountPath: /common_functions.sh
+              subPath: common_functions.sh
               readOnly: true
             - name: ceph-etc
               mountPath: /etc/ceph/ceph.conf
@@ -90,4 +95,5 @@ spec:
         - name: ceph-client-admin-keyring
           secret:
             secretName: {{ .Values.secrets.keyrings.admin }}
+{{- end }}
 {{- end }}

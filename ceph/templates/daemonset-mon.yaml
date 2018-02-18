@@ -14,8 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.daemonset_mon .Values.deployment.ceph }}
+{{- if .Values.manifests.daemonset_mon }}
 {{- $envAll := . }}
+{{- if .Values.deployment.ceph }}
 {{- $dependencies := .Values.dependencies.mon }}
 
 {{- $serviceAccountName := "ceph-mon"}}
@@ -68,17 +69,21 @@ spec:
           image: {{ .Values.images.tags.ceph_daemon }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
           command:
-            - /tmp/init-dirs.sh
-          env:
-            - name: CLUSTER
-              value: "ceph"
+            - /tmp/init_dirs.sh
           volumeMounts:
             - name: ceph-bin
-              mountPath: /tmp/init-dirs.sh
-              subPath: init-dirs.sh
+              mountPath: /tmp/init_dirs.sh
+              subPath: init_dirs.sh
+              readOnly: true
+            - name: ceph-bin
+              mountPath: /variables_entrypoint.sh
+              subPath: variables_entrypoint.sh
               readOnly: true
             - name: pod-var-lib-ceph
               mountPath: /var/lib/ceph
+              readOnly: false
+            - name: mon-directory
+              mountPath: /var/lib/ceph/mon
               readOnly: false
             - name: pod-run
               mountPath: /run
@@ -89,8 +94,6 @@ spec:
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.mon | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
-            - name: CLUSTER
-              value: "ceph"
             - name: K8S_HOST_NETWORK
               value: "1"
             - name: MONMAP
@@ -100,6 +103,8 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
+            - name: CEPH_DAEMON
+              value: mon
             - name: CEPH_PUBLIC_NETWORK
               value: {{ .Values.network.public | quote }}
             - name: KUBECTL_PARAM
@@ -108,49 +113,47 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
           command:
-            - /tmp/mon-start.sh
+            - /start_mon.sh
           lifecycle:
             preStop:
                 exec:
                   command:
-                    - /tmp/mon-stop.sh
+                    - /remove-mon.sh
           ports:
             - containerPort: 6789
           livenessProbe:
            exec:
             command:
-             - /tmp/mon-check.sh
-             - liveness
+             - /ceph-mon-liveness.sh
            initialDelaySeconds: 60
            periodSeconds: 60
           readinessProbe:
            exec:
             command:
-             - /tmp/mon-check.sh
-             - readiness
+             - /ceph-mon-readiness.sh
            initialDelaySeconds: 60
            periodSeconds: 60
           volumeMounts:
             - name: ceph-bin
-              mountPath: /tmp/mon-start.sh
-              subPath: mon-start.sh
+              mountPath: /start_mon.sh
+              subPath: start_mon.sh
               readOnly: true
             - name: ceph-bin
-              mountPath: /tmp/mon-stop.sh
-              subPath: mon-stop.sh
+              mountPath: /remove-mon.sh
+              subPath: remove-mon.sh
               readOnly: true
             - name: ceph-bin
-              mountPath: /tmp/mon-check.sh
-              subPath: mon-check.sh
+              mountPath: /common_functions.sh
+              subPath: common_functions.sh
+              readOnly: true
+            - name: ceph-bin
+              mountPath: /ceph-mon-liveness.sh
+              subPath: ceph-mon-liveness.sh
+              readOnly: true
+            - name: ceph-bin
+              mountPath: /ceph-mon-readiness.sh
+              subPath: ceph-mon-readiness.sh
               readOnly: true
             - name: ceph-etc
               mountPath: /etc/ceph/ceph.conf
@@ -164,6 +167,10 @@ spec:
               mountPath: /etc/ceph/ceph.mon.keyring
               subPath: ceph.mon.keyring
               readOnly: false
+            - name: ceph-bin
+              mountPath: /variables_entrypoint.sh
+              subPath: variables_entrypoint.sh
+              readOnly: true
             - name: ceph-bootstrap-osd-keyring
               mountPath: /var/lib/ceph/bootstrap-osd/ceph.keyring
               subPath: ceph.keyring
@@ -179,6 +186,9 @@ spec:
             - name: pod-var-lib-ceph
               mountPath: /var/lib/ceph
               readOnly: false
+            - name: mon-directory
+              mountPath: /var/lib/ceph/mon
+              readOnly: false
             - name: pod-run
               mountPath: /run
               readOnly: false
@@ -193,10 +203,13 @@ spec:
             defaultMode: 0444
         - name: pod-var-lib-ceph
           hostPath:
-            path: {{ .Values.conf.storage.mon.directory }}
+            path: {{ .Values.ceph.storage.mon_directory }}
         - name: pod-run
           emptyDir:
             medium: "Memory"
+        - name: mon-directory
+          hostPath:
+            path: {{ .Values.ceph.storage.mon_directory }}
         - name: ceph-client-admin-keyring
           secret:
             secretName: {{ .Values.secrets.keyrings.admin }}
@@ -212,4 +225,5 @@ spec:
         - name: ceph-bootstrap-rgw-keyring
           secret:
             secretName: {{ .Values.secrets.keyrings.rgw }}
+{{- end }}
 {{- end }}
